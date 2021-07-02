@@ -1,0 +1,81 @@
+--see all data from nashville housing data set
+select * from nashville
+
+--see if sale date column is converted correctly
+select [sale date], CONVERT(date,[sale date]) from nashville
+
+--create new date column
+alter table nashville add sale_date_converted date
+
+--enter values in new sale_date_converted column
+update nashville set sale_date_converted=convert(date,[sale date])
+
+--see if sale_date_converted column is correct
+select [sale date], CONVERT(date,[sale date]), sale_date_converted from nashville
+
+--check for null values in property address column
+select * from nashville where [property address] is null
+
+--see if values exist from duplicate parcel id, to replace
+select a.[parcel id], a.[property address], b.[parcel id], b.[property address]
+from nashville a 
+join nashville b on a.[parcel id]=b.[parcel id]
+   and a.[serial number1]<>b.[serial number1]
+where a.[property address] is null
+and b.[property address] is not null
+
+--update property address column 
+update a set [property address]=isnull(a.[property address],b.[property address])
+from nashville a 
+join nashville b on a.[parcel id]=b.[parcel id]
+   and a.[serial number1]<>b.[serial number1]
+where a.[property address] is null
+and b.[property address] is not null
+
+
+--split owner name by creating columns with surname and name inside data set
+alter table nashville
+add owner_name_split_surname nvarchar(255)
+
+alter table nashville
+add owner_name_split_name nvarchar(255)
+
+update nashville 
+set owner_name_split_surname= substring([owner name], 1, nullif(charindex(',', [owner name]),0)-1)
+WHERE [owner name] LIKE '%,%'
+
+update nashville 
+set owner_name_split_surname= [owner name]
+WHERE [owner name] not LIKE '%,%'
+
+update nashville 
+set owner_name_split_name= substring([owner name], nullif(charindex(',', [owner name]),0)+2, len([owner name]))
+
+/*
+--2nd way to split owner name column. i do not recommend it
+select 
+parsename(replace(replace([owner name], '.', ''), ',', '.'), 2) as surname,
+parsename(replace(replace([owner name], '.', ''), ',', '.'), 1) as name
+from nashville
+order by [serial number1]
+*/
+
+--check data are correct
+select * from nashville where owner_name_split_surname is null and [owner name] is not null
+
+--see if there are duplicate data
+--create cte that will include a column that checks for duplicates
+with row_num_cte as(
+select *, 
+ROW_NUMBER() over (
+partition by [parcel id], [property address], [sale price], [sale date], [legal reference]
+order by [serial number1]) as row_num
+from nashville --order by [parcel id]
+)
+select * from row_num_cte where row_num>1 order by [property address]
+
+--delete duplicates (select cte too before you execute the command)
+delete from row_num_cte where row_num>1
+
+--delete unused columns
+alter table nashville drop column [serial number2], [sale date]
